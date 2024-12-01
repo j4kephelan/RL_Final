@@ -1,10 +1,7 @@
-import gym
-import gym_chess
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import chess
 from collections import defaultdict
 
 

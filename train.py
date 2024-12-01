@@ -1,11 +1,4 @@
-import gym
-import gym_chess
 import numpy as np
-import random
-from collections import defaultdict
-import torch
-import torch.nn as nn
-import torch.optim as optim
 
 
 def train_agents(env, mcts_agent, sac_agent, replay_buffer, episodes=1000, batch_size=64, train_interval=5):
