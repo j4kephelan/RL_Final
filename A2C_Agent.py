@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 
+from encoding_states import encode_state
+
 class A2CAgent:
     def __init__(self, state_dim, action_dim, lr=0.001, gamma=0.99):
         self.state_dim = state_dim
@@ -37,16 +39,56 @@ class A2CAgent:
             nn.Linear(128, 1)
         )
 
-    def select_action(self, state):
-        """Select an action based on the policy network."""
-        state_tensor = torch.FloatTensor(state).unsqueeze(0)
-        probs = self.policy_net(state_tensor).detach().numpy().squeeze()
-        action = np.random.choice(len(probs), p=probs)
-        return action
+    def select_action(self, env):
+        """Select an action based on the policy network, restricted to legal moves."""
+        # Encode the current state
+        encoded_env = encode_state(env)
 
-    def store_transition(self, state, action, reward, next_state, done):
+        # Ensure the state is a 1D array of size 64
+        assert len(encoded_env) == 64, f"Expected state size 64, got {len(encoded_env)}"
+
+        # Convert the encoded state to a PyTorch tensor and add batch dimension
+        encoded_env = torch.FloatTensor(encoded_env).unsqueeze(0)
+
+        # Get action probabilities from the policy network
+        action_probs = self.policy_net(encoded_env).detach().numpy().squeeze()
+
+        # Get the list of legal moves from the environment
+        legal_moves = list(env.legal_moves)
+
+        if not legal_moves:
+            return None  # No legal moves, game over
+
+        # Map legal moves to indices
+        legal_moves_map = {i: move for i, move in enumerate(legal_moves)}
+
+        # Filter probabilities to include only legal moves
+        legal_probs = np.array([action_probs[i] for i in legal_moves_map.keys()])
+
+        # Replace NaNs with 0s
+        legal_probs = np.nan_to_num(legal_probs, nan=0.0)
+
+        # Handle case where all probabilities are zero (could happen due to a bug or incorrect output)
+        if legal_probs.sum() == 0:
+            # print("Warning: All legal move probabilities are zero. Assigning uniform probabilities.")
+            legal_probs = np.ones_like(legal_probs)  # Assign uniform probability to all legal moves
+        else:
+            # Normalize probabilities to ensure they sum to 1
+            legal_probs /= legal_probs.sum()  # Normalize to sum to 1
+
+        # Ensure the probabilities sum to exactly 1, with a tolerance for floating-point errors
+        if not np.isclose(legal_probs.sum(), 1.0):
+            legal_probs /= legal_probs.sum()  # Re-normalize if necessary
+
+        # Select an action index from the filtered probabilities
+        selected_index = np.random.choice(list(legal_moves_map.keys()), p=legal_probs)
+
+        # Return the selected legal move and its index
+        return legal_moves_map[selected_index], selected_index
+
+    def store_transition(self, prev_env, action_idx, reward, next_env, done):
         """Store transition for training."""
-        self.transitions.append((state, action, reward, next_state, done))
+        self.transitions.append((prev_env, action_idx, reward, next_env, done))
 
     def compute_returns(self, rewards, dones):
         """Compute discounted returns."""
@@ -66,7 +108,9 @@ class A2CAgent:
 
         # Extract transitions
         states, actions, rewards, next_states, dones = zip(*self.transitions)
-        states = torch.FloatTensor(states)
+
+        # Convert the list of states to a single numpy array first, then to a tensor
+        states = torch.FloatTensor(np.array(states))  # Convert list of numpy arrays to numpy array before tensor
         actions = torch.LongTensor(actions)
         returns = torch.FloatTensor(self.compute_returns(rewards, dones))
 
@@ -74,7 +118,7 @@ class A2CAgent:
         self.transitions = []
 
         # Compute advantage
-        values = self.value_net(states).squeeze()
+        values = self.value_net(states).squeeze(1)  # Ensure values have the shape [batch_size]
         advantages = returns - values.detach()
 
         # Update policy network

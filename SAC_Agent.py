@@ -3,42 +3,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from collections import defaultdict
-
-
-def parse_unicode_state(unicode_str):
-    # Mapping from Unicode pieces to integers
-    piece_map = {
-        '♙': 1,  # White pawn
-        '♖': 2,  # White rook
-        '♘': 3,  # White knight
-        '♗': 4,  # White bishop
-        '♕': 5,  # White queen
-        '♔': 6,  # White king
-        '♟': -1,  # Black pawn
-        '♜': -2,  # Black rook
-        '♞': -3,  # Black knight
-        '♝': -4,  # Black bishop
-        '♛': -5,  # Black queen
-        '♚': -6,  # Black king
-        '⭘': 0,  # Empty square (if using ⭘ for empty)
-        ' ': 0,  # Empty square (if using space for empty)
-    }
-
-    state = []
-
-    # Split the unicode_str into rows and process each row
-    rows = unicode_str.splitlines()
-    for row in rows:
-        for char in row:
-            # Append the numerical value corresponding to the piece in the square
-            state.append(piece_map.get(char, 0))  # Default to 0 if unknown character
-
-    # Ensure the state is a 1D array with 64 elements
-    return np.array(state[:64])  # Cut off any excess data (if any) to keep the board size 64
+from encoding_states import encode_state
 
 
 class SACAgent:
-    def __init__(self, state_dim, action_dim, lr=3e-4, gamma=0.99, tau=0.005, alpha=0.2):
+    def __init__(self, state_dim, action_dim, lr=0.001, gamma=0.99, tau=0.005, alpha=0.2):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.gamma = gamma
@@ -65,12 +34,12 @@ class SACAgent:
             nn.Linear(256, 256),
             nn.ReLU(),
             nn.Linear(256, self.action_dim),
-            nn.Tanh()  # Ensure output between -1 and 1 for continuous action space
+            nn.Softmax(dim=-1)  # Softmax for discrete probabilities
         )
 
     def build_critic(self):
         return nn.Sequential(
-            nn.Linear(self.state_dim + self.action_dim, 256),
+            nn.Linear(self.state_dim + self.action_dim, 256),  # Correct input size
             nn.ReLU(),
             nn.Linear(256, 256),
             nn.ReLU(),
@@ -85,21 +54,18 @@ class SACAgent:
             target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
     def select_action(self, env):
-        # Render the board to unicode string
+        # Encode the current state
+        encoded_env = encode_state(env)
 
-        unicode_str = env.render(mode='unicode')
-
-        # Convert the unicode string to numerical representation
-        encoded_env = parse_unicode_state(unicode_str)
-
-        # Ensure the state is a 1D array of size 64
+        # Ensure encoded state is a numpy array with the correct dtype
+        encoded_env = np.array(encoded_env, dtype=np.float32)  # Ensure it's float32
         assert encoded_env.shape == (64,), f"Expected state shape (64,), got {encoded_env.shape}"
 
         # Convert the encoded state to a PyTorch tensor and add batch dimension
         encoded_env = torch.FloatTensor(encoded_env).unsqueeze(0)
 
-        # Select action using the actor (continuous vector output)
-        action = self.actor(encoded_env).detach().numpy()[0]
+        # Get action probabilities from the actor
+        action_probs = self.actor(encoded_env).detach().numpy()[0]
 
         # Get the list of legal moves from the environment
         legal_moves = list(env.legal_moves)
@@ -107,23 +73,70 @@ class SACAgent:
         if not legal_moves:
             return None  # If no legal moves, return None (checkmate or stalemate)
 
-        # Scale the continuous action to a valid legal move index
-        move_index = int(np.clip(action[0] * len(legal_moves), 0, len(legal_moves) - 1))  # Map to a valid index
+        # Convert the legal moves to a mapping of indices
+        legal_moves_map = {i: move for i, move in enumerate(legal_moves)}
 
-        # Select the corresponding legal move from the list
-        return legal_moves[move_index]
+        # Get the probabilities of legal moves
+        legal_probs = np.array([action_probs[i] for i in legal_moves_map.keys()])
 
-        # # Convert the move to algebraic notation
-        # move_str = self.convert_move_to_notation(selected_move)
-        #
-        # return move_str
+        # Normalize the probabilities to ensure they sum to 1
+        if legal_probs.sum() == 0:
+            legal_probs = np.ones_like(legal_probs)
+        legal_probs /= legal_probs.sum()
+
+        # Select the action based on the probabilities of legal moves
+        selected_index = np.random.choice(list(legal_moves_map.keys()), p=legal_probs)
+        return legal_moves_map[selected_index], selected_index
 
     def convert_move_to_notation(self, move):
         # Convert the move (e.g., chess.Move) to algebraic notation
         return move.uci()  # UCI (Universal Chess Interface) format is like 'e2e4', 'b1c3'
 
-
     def train(self, replay_buffer, batch_size=64):
-        # Training logic here (similar to the previous implementation)
-        pass
+        # Sample a batch of transitions from the replay buffer
+        states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
+
+        # Convert to PyTorch tensors
+        states = torch.FloatTensor(states)
+        actions = torch.nn.functional.one_hot(torch.LongTensor(actions), num_classes=self.action_dim).float()
+        rewards = torch.FloatTensor(rewards).unsqueeze(1)
+        next_states = torch.FloatTensor(next_states)
+        dones = torch.FloatTensor(dones).unsqueeze(1)
+
+        # Compute target Q values
+        with torch.no_grad():
+            next_action_probs = self.actor(next_states)
+            next_action_log_probs = torch.log(next_action_probs + 1e-8)
+            next_q1 = self.target_critic1(torch.cat([next_states, next_action_probs], dim=1))
+            next_q2 = self.target_critic2(torch.cat([next_states, next_action_probs], dim=1))
+            next_q = torch.min(next_q1, next_q2) - self.alpha * next_action_log_probs
+            target_q = rewards + self.gamma * (1 - dones) * next_q
+
+        # Update critic networks
+        current_q1 = self.critic1(torch.cat([states, actions], dim=1))
+        current_q2 = self.critic2(torch.cat([states, actions], dim=1))
+        critic1_loss = nn.MSELoss()(current_q1, target_q)
+        critic2_loss = nn.MSELoss()(current_q2, target_q)
+
+        self.critic1_optimizer.zero_grad()
+        critic1_loss.backward()
+        self.critic1_optimizer.step()
+
+        self.critic2_optimizer.zero_grad()
+        critic2_loss.backward()
+        self.critic2_optimizer.step()
+
+        # Update actor network
+        action_probs = self.actor(states)
+        log_probs = torch.log(action_probs + 1e-8)
+        q1 = self.critic1(torch.cat([states, action_probs], dim=1))
+        q2 = self.critic2(torch.cat([states, action_probs], dim=1))
+        actor_loss = (self.alpha * log_probs - torch.min(q1, q2)).mean()
+
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
+
+        # Update target networks
+        self.update_target_networks()
 
