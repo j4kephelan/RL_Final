@@ -6,27 +6,17 @@ import numpy as np
 from encoding_states import encode_state
 
 class A2CAgent:
-<<<<<<< HEAD
     def __init__(self, state_dim, action_dim, lr=0.001, gamma=0.99, device=None):
-=======
-    def __init__(self, state_dim, action_dim, lr=0.001, gamma=0.99):
->>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.gamma = gamma
 
-<<<<<<< HEAD
         # Set device to GPU if available, otherwise fallback to CPU
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
 
         # Actor-Critic networks
         self.policy_net = self.build_policy_network(state_dim, action_dim).to(self.device)
         self.value_net = self.build_value_network(state_dim).to(self.device)
-=======
-        # Actor-Critic networks
-        self.policy_net = self.build_policy_network(state_dim, action_dim)
-        self.value_net = self.build_value_network(state_dim)
->>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
 
         # Optimizers
         self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
@@ -35,11 +25,8 @@ class A2CAgent:
         # Transition storage
         self.transitions = []
 
-<<<<<<< HEAD
         self.name = "a2c"
 
-=======
->>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
     def build_policy_network(self, state_dim, action_dim):
         """Build the policy network."""
         return nn.Sequential(
@@ -66,17 +53,10 @@ class A2CAgent:
         assert len(encoded_env) == 64, f"Expected state size 64, got {len(encoded_env)}"
 
         # Convert the encoded state to a PyTorch tensor and add batch dimension
-<<<<<<< HEAD
         encoded_env = torch.FloatTensor(encoded_env).unsqueeze(0).to(self.device)
 
         # Get action probabilities from the policy network
         action_probs = self.policy_net(encoded_env).detach().cpu().numpy().squeeze()
-=======
-        encoded_env = torch.FloatTensor(encoded_env).unsqueeze(0)
-
-        # Get action probabilities from the policy network
-        action_probs = self.policy_net(encoded_env).detach().numpy().squeeze()
->>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
 
         # Get the list of legal moves from the environment
         legal_moves = list(env.legal_moves)
@@ -95,10 +75,6 @@ class A2CAgent:
 
         # Handle case where all probabilities are zero (could happen due to a bug or incorrect output)
         if legal_probs.sum() == 0:
-<<<<<<< HEAD
-=======
-            # print("Warning: All legal move probabilities are zero. Assigning uniform probabilities.")
->>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
             legal_probs = np.ones_like(legal_probs)  # Assign uniform probability to all legal moves
         else:
             # Normalize probabilities to ensure they sum to 1
@@ -138,15 +114,9 @@ class A2CAgent:
         states, actions, rewards, next_states, dones = zip(*self.transitions)
 
         # Convert the list of states to a single numpy array first, then to a tensor
-<<<<<<< HEAD
         states = torch.FloatTensor(np.array(states)).to(self.device)  # Move to GPU
         actions = torch.LongTensor(actions).to(self.device)  # Move to GPU
         returns = torch.FloatTensor(self.compute_returns(rewards, dones)).to(self.device)  # Move to GPU
-=======
-        states = torch.FloatTensor(np.array(states))  # Convert list of numpy arrays to numpy array before tensor
-        actions = torch.LongTensor(actions)
-        returns = torch.FloatTensor(self.compute_returns(rewards, dones))
->>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
 
         # Reset transitions
         self.transitions = []
