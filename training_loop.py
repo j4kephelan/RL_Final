@@ -1,6 +1,9 @@
 from A2C_Agent import A2CAgent
 from ReplayBuffer import ReplayBuffer
 from SAC_Agent import SACAgent
+from A2C_Agent import A2CAgent
+from ReplayBuffer import ReplayBuffer
+from SAC_Agent import SACAgent
 import gym
 import gym_chess
 import numpy as np

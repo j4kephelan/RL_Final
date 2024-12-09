@@ -1,12 +1,24 @@
+<<<<<<< HEAD
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+=======
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from collections import defaultdict
+>>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
 from encoding_states import encode_state
 
 
 class SACAgent:
+<<<<<<< HEAD
     def __init__(self, state_dim, action_dim, lr=0.001, gamma=0.99, tau=0.005, alpha=0.2, device=None):
+=======
+    def __init__(self, state_dim, action_dim, lr=0.001, gamma=0.99, tau=0.005, alpha=0.2):
+>>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.gamma = gamma
@@ -69,7 +81,11 @@ class SACAgent:
         encoded_env = torch.FloatTensor(encoded_env).unsqueeze(0).to(self.device)
 
         # Get action probabilities from the actor
+<<<<<<< HEAD
         action_probs = self.actor(encoded_env).detach().cpu().numpy()[0]
+=======
+        action_probs = self.actor(encoded_env).detach().numpy()[0]
+>>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
 
         # Get the list of legal moves from the environment
         legal_moves = list(env.legal_moves)
@@ -99,6 +115,53 @@ class SACAgent:
     def train(self, replay_buffer, batch_size=64):
         # Sample a batch of transitions from the replay buffer
         states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
+<<<<<<< HEAD
+=======
+
+        # Convert to PyTorch tensors
+        states = torch.FloatTensor(states)
+        actions = torch.nn.functional.one_hot(torch.LongTensor(actions), num_classes=self.action_dim).float()
+        rewards = torch.FloatTensor(rewards).unsqueeze(1)
+        next_states = torch.FloatTensor(next_states)
+        dones = torch.FloatTensor(dones).unsqueeze(1)
+
+        # Compute target Q values
+        with torch.no_grad():
+            next_action_probs = self.actor(next_states)
+            next_action_log_probs = torch.log(next_action_probs + 1e-8)
+            next_q1 = self.target_critic1(torch.cat([next_states, next_action_probs], dim=1))
+            next_q2 = self.target_critic2(torch.cat([next_states, next_action_probs], dim=1))
+            next_q = torch.min(next_q1, next_q2) - self.alpha * next_action_log_probs
+            target_q = rewards + self.gamma * (1 - dones) * next_q
+
+        # Update critic networks
+        current_q1 = self.critic1(torch.cat([states, actions], dim=1))
+        current_q2 = self.critic2(torch.cat([states, actions], dim=1))
+        critic1_loss = nn.MSELoss()(current_q1, target_q)
+        critic2_loss = nn.MSELoss()(current_q2, target_q)
+
+        self.critic1_optimizer.zero_grad()
+        critic1_loss.backward()
+        self.critic1_optimizer.step()
+
+        self.critic2_optimizer.zero_grad()
+        critic2_loss.backward()
+        self.critic2_optimizer.step()
+
+        # Update actor network
+        action_probs = self.actor(states)
+        log_probs = torch.log(action_probs + 1e-8)
+        q1 = self.critic1(torch.cat([states, action_probs], dim=1))
+        q2 = self.critic2(torch.cat([states, action_probs], dim=1))
+        actor_loss = (self.alpha * log_probs - torch.min(q1, q2)).mean()
+
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
+
+        # Update target networks
+        self.update_target_networks()
+>>>>>>> 40271a03c060f09b4879cfd10ada693f7ca34eb4
 
         # Convert to PyTorch tensors and move to device
         states = torch.FloatTensor(states).to(self.device)
