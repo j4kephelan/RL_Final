@@ -8,9 +8,6 @@ class GreedyAgent:
         self.name = "greedy"
 
     def get_piece_value(self, piece):
-        """
-        Returns the point value of a given piece.
-        """
         piece_values = {
             1: 1,   # White pawn
             2: 5,   # White rook
@@ -36,16 +33,12 @@ class GreedyAgent:
             if before != 0 and after == 0:  # A piece was removed
                 return self.get_piece_value(before)
 
-        # No piece was captured
         return 0
 
     def select_action(self, env):
-        """
-        Selects the best action based on potential reward from capturing a piece.
-        """
-        legal_moves = list(env.legal_moves)  # Get all legal moves from the environment
+
         if not legal_moves:
-            return None  # No moves available (e.g., checkmate or stalemate)
+            return None  #
 
         best_move = None
         best_reward = float('-inf')
@@ -54,22 +47,16 @@ class GreedyAgent:
         board_before = encode_state(env)
 
         for action in legal_moves:
-            # Simulate the move
-            test_env = copy.deepcopy(env)  # Create a deep copy of the environment to simulate the action
-            test_env.step(action)  # Apply the move
+            test_env = copy.deepcopy(env)  
+            test_env.step(action) 
 
-            # Encode the board state after making the move
             board_after = encode_state(test_env)
 
-            # Calculate the reward for the move
             reward = self.get_reward(board_before, board_after)
-            print(reward)
-            # Update the best move if this move is more rewarding
             if reward > best_reward:
                 best_reward = reward
                 best_move = action
 
-        # Return the best move and its index
         return best_move, legal_moves.index(best_move) if best_move else None
 
     def train(self, replay_buffer, batch_size=64):

@@ -1,4 +1,3 @@
-
 from A2C_Agent import A2CAgent
 from ReplayBuffer import ReplayBuffer
 from SAC_Agent import SACAgent
@@ -15,30 +14,18 @@ import math
 from training_loop import train_agents, evaluate_results
 from plot import plot_results
 import time
-from concurrent.futures import ProcessPoolExecutor
-
+import time
+import gym
 
 def visualize_results(results, agent1, agent2):
-  evaluate_results(results, agent1.name, agent2.name)
-  plot_results(results, agent1.name, agent2.name)
-
+    evaluate_results(results, agent1.name, agent2.name)
+    plot_results(results, agent1.name, agent2.name)
 
 def train_and_visualize(agent, opponent, agent_name, opponent_name, episodes):
     env = gym.make("Chess-v0")
     replay_buffer = ReplayBuffer()
     results = train_agents(env, agent, opponent, replay_buffer, episodes=episodes, batch_size=64)
     visualize_results(results, agent, opponent)
-    return results
-
-def train_agents_parallel(agent_opponent_pairs, episodes):
-    results = []
-    with ProcessPoolExecutor() as executor:
-        tasks = [
-            executor.submit(train_and_visualize, agent, opponent, agent_name, opponent_name, episodes)
-            for (agent, opponent, agent_name, opponent_name) in agent_opponent_pairs
-        ]
-        for future in tasks:
-            results.append(future.result())
     return results
 
 def main_training_pipeline():
@@ -56,7 +43,8 @@ def main_training_pipeline():
         (A2CAgent(state_dim=64, action_dim=4672), greedy_agent, "A2CAgent", "GreedyAgent"),
         (SACAgent(state_dim=64, action_dim=4672), greedy_agent, "SACAgent", "GreedyAgent"),
     ]
-    train_agents_parallel(greedy_phase_pairs, episodes=10)
+    for agent, opponent, agent_name, opponent_name in greedy_phase_pairs:
+        train_and_visualize(agent, opponent, agent_name, opponent_name, episodes=1_500)
 
     # Phase 2: Train against the RandomAgent
     print("Phase 2: Training against RandomAgent...")
@@ -64,13 +52,14 @@ def main_training_pipeline():
         (A2CAgent(state_dim=64, action_dim=4672), random_agent, "A2CAgent", "RandomAgent"),
         (SACAgent(state_dim=64, action_dim=4672), random_agent, "SACAgent", "RandomAgent"),
     ]
-    train_agents_parallel(random_phase_pairs, episodes=10)
+    for agent, opponent, agent_name, opponent_name in random_phase_pairs:
+        train_and_visualize(agent, opponent, agent_name, opponent_name, episodes=2_500)
 
     # Phase 3: Have A2CAgent and SACAgent face each other
     print("Phase 3: A2CAgent vs SACAgent...")
     env = gym.make("Chess-v0")
     replay_buffer = ReplayBuffer()
-    results = train_agents(env, a2c_agent, sac_agent, replay_buffer, episodes=10, batch_size=64)
+    results = train_agents(env, a2c_agent, sac_agent, replay_buffer, episodes=2_500, batch_size=64)
     visualize_results(results, a2c_agent, sac_agent)
 
     end_time = time.time()
