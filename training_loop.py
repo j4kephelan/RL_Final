@@ -47,16 +47,24 @@ def train_agents(env, agent1, agent2, replay_buffer, episodes=1000, batch_size=6
 
             # Adjust reward logic
             if done or episode_length >= 499:
-                reward = -1 if reward == 0 else math.exp((-episode_length / 50) + 2)
+                if reward == 0:  # Draw
+                    reward = -1
+                else:
+                    reward = math.exp((-episode_length / 50) + 2)
 
-            # Update total rewards
-            total_rewards[current_agent.name] += reward
-            opponent_name = agent2.name if current_agent == agent1 else agent1.name
-            if reward > 0:  # Current agent wins
-                total_rewards[opponent_name] += -reward
-            elif reward == -1:  # Draw
-                total_rewards[agent1.name] -= 1
-                total_rewards[agent2.name] -= 1
+                # Update total rewards
+                total_rewards[current_agent.name] += reward
+
+                opponent_name = agent2.name if current_agent == agent1 else agent1.name
+
+                if reward > 0:  # Current agent wins
+                    total_rewards[opponent_name] += -reward  # Opponent loses
+                elif reward == -1:  # Draw
+                    total_rewards[agent1.name] -= 1
+                    total_rewards[agent2.name] -= 1
+                else:  # Current agent loses (reward < 0)
+                    total_rewards[opponent_name] += -reward  # Opponent wins
+                    total_rewards[current_agent.name] += reward  # Current agent loses
 
             replay_buffer_next_state = encode_state(env)
 
