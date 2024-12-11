@@ -58,32 +58,28 @@ class SACAgent:
             target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
     def select_action(self, env):
-        # Encode the current state
         encoded_env = encode_state(env)
 
-        # Ensure encoded state is a numpy array with the correct dtype
         encoded_env = np.array(encoded_env, dtype=np.float32)  # Ensure it's float32
         assert encoded_env.shape == (64,), f"Expected state shape (64,), got {encoded_env.shape}"
-
-        # Convert the encoded state to a PyTorch tensor and add batch dimension
         encoded_env = torch.FloatTensor(encoded_env).unsqueeze(0).to(self.device)
 
-        # Get action probabilities from the actor
+        # action prob
         action_probs = self.actor(encoded_env).detach().cpu().numpy()[0]
 
-        # Get the list of legal moves from the environment
+        # legal moves
         legal_moves = list(env.legal_moves)
 
         if not legal_moves:
-            return None  # If no legal moves, return None (checkmate or stalemate)
+            return None  
 
-        # Convert the legal moves to a mapping of indices
+        # convert the legal moves to a mapping of indices
         legal_moves_map = {i: move for i, move in enumerate(legal_moves)}
 
-        # Get the probabilities of legal moves
+        # probabilities of legal moves
         legal_probs = np.array([action_probs[i] for i in legal_moves_map.keys()])
 
-        # Normalize the probabilities to ensure they sum to 1
+        # normalize the probabilities to ensure they sum to 1
         if legal_probs.sum() == 0:
             legal_probs = np.ones_like(legal_probs)
         legal_probs /= legal_probs.sum()
@@ -93,21 +89,19 @@ class SACAgent:
         return legal_moves_map[selected_index], selected_index
 
     def convert_move_to_notation(self, move):
-        # Convert the move (e.g., chess.Move) to algebraic notation
-        return move.uci()  # UCI (Universal Chess Interface) format is like 'e2e4', 'b1c3'
+        # convert move
+        return move.uci()  # UCI 'e2e4', 'b1c3'
 
     def train(self, replay_buffer, batch_size=64):
-        # Sample a batch of transitions from the replay buffer
         states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
 
-        # Convert to PyTorch tensors and move to device
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.nn.functional.one_hot(torch.LongTensor(actions), num_classes=self.action_dim).float().to(self.device)
         rewards = torch.FloatTensor(rewards).unsqueeze(1).to(self.device)
         next_states = torch.FloatTensor(next_states).to(self.device)
         dones = torch.FloatTensor(dones).unsqueeze(1).to(self.device)
 
-        # Compute target Q values
+        # compute target Q values
         with torch.no_grad():
             next_action_probs = self.actor(next_states)
             next_action_log_probs = torch.log(next_action_probs + 1e-8)
@@ -116,7 +110,6 @@ class SACAgent:
             next_q = torch.min(next_q1, next_q2) - self.alpha * next_action_log_probs
             target_q = rewards + self.gamma * (1 - dones) * next_q
 
-        # Update critic networks
         current_q1 = self.critic1(torch.cat([states, actions], dim=1))
         current_q2 = self.critic2(torch.cat([states, actions], dim=1))
         critic1_loss = nn.MSELoss()(current_q1, target_q)
@@ -135,7 +128,7 @@ class SACAgent:
         log_probs = torch.log(action_probs + 1e-8)
         q1 = self.critic1(torch.cat([states, action_probs], dim=1))
         q2 = self.critic2(torch.cat([states, action_probs], dim=1))
-        actor_loss = (self.alpha * log_probs - torch.min(q1, q2)).mean()
+        actor_loss = (self.alpha * log_probs - torch.min(q1, q2)).mean() # solved an issue where the tensors didn't match
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()

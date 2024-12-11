@@ -14,15 +14,12 @@ class A2CAgent:
         # Set device to GPU if available, otherwise fallback to CPU
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
 
-        # Actor-Critic networks
         self.policy_net = self.build_policy_network(state_dim, action_dim).to(self.device)
         self.value_net = self.build_value_network(state_dim).to(self.device)
 
-        # Optimizers
         self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         self.value_optimizer = optim.Adam(self.value_net.parameters(), lr=lr)
 
-        # Transition storage
         self.transitions = []
 
         self.name = "a2c"
