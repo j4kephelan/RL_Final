@@ -12,7 +12,7 @@ import random
 import math
 from encoding_states import encode_state
 
-def train_agents(env, agent1, agent2, replay_buffer, episodes=1000, batch_size=64, train_interval=5):
+def train_agents(env, agent1, agent2, replay_buffer, episodes=1000, batch_size=64):
     first_agent = agent1
     second_agent = agent2
 
